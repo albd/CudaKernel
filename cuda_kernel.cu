@@ -1,14 +1,18 @@
 //(A*X + B)mod N
 #include <stdio.h>
+#include <signal.h>
 #include "cycleTimer.h"
+#include <time.h>
+#include <iostream>
 
 #define A 5
 #define B 7
 #define N 10000
-#define ARRAY_LENGTH 7168//81920 //1024*80
-#define ITER 200000
+#define ARRAY_LENGTH 163840//81920 //1024*80
+#define ITER 20000000
 #define THREADS_PER_BLOCK 128
 
+using namespace std;
 
 __global__ void kernel(int* num)
 {
@@ -45,8 +49,20 @@ bool checkCorrectness(int *h_numbers, int *seq_numbers) {
 	return true;
 }
 
+volatile bool program_status = true;
+
+void  INThandler(int sig)
+{
+     char  c;
+
+     signal(sig, SIG_IGN);
+     program_status = false;
+     signal(SIGINT, INThandler);
+}
+
 int main()
 {
+	signal(SIGINT, INThandler);
 	int *d_numbers, *h_numbers, *seq_numbers;
 	double startTime, endTime, overallDuration;
 
@@ -59,18 +75,27 @@ int main()
 	unsigned int count = 0;
 		
 	while(1) {
+		if(program_status == false) {
+			printf("dieing gracefully ");
+			break;
+		}
 		startTime = CycleTimer::currentSeconds();
 		kernel<<<blocks, THREADS_PER_BLOCK>>>(d_numbers);
 		cudaThreadSynchronize();
 		endTime = CycleTimer::currentSeconds();
 		
 		overallDuration = endTime - startTime;
-		if (count++ % 100 == 0) {
-			if (1000.f * overallDuration > 4.5) {
+		//if (count++ % 100 == 0) {
+			if (1000.f * overallDuration > 4700) {
 				printf("Deadline missed ");
+				cerr<<"missed"<<endl;
+			} else {
+				cerr<<"pass"<<endl;
 			}
-			printf("Overall parallel: %.3f ms\n", 1000.f * overallDuration);
-		}
+				
+			//printf("%ld Overall parallel: %.3f ms\n", time(NULL), 1000.f * overallDuration);
+			printf("offline_trace %ld %.3f\n", time(NULL), 1000.f * overallDuration);
+		//}
 		
 	}
 
